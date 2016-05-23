@@ -16,6 +16,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+test*/
 lib64/
 parts/
 sdist/
@@ -60,3 +61,7 @@ target/
 
 #Ipython Notebook
 .ipynb_checkpoints
+
+#Other
+TODO
+.*.swp
