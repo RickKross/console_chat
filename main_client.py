@@ -1,4 +1,5 @@
 import curses
+from time import gmtime, strftime, sleep
 import curses.textpad
 from curses import wrapper
 class Client():
@@ -6,9 +7,18 @@ class Client():
     def __init__(self):
         self.history = []
 
+    def timestamp(self):
+        return strftime("%H:%M:%S", gmtime())
+
     def main(self):
         while True:
-            data = self.win_input()
+            try:
+                data = self.win_input()
+            except KeyboardInterrupt:
+                break
+            if not data:
+                break
+            sleep(0.05) #чтоб нормально отрисовалось
             self.win_print(data)
     def win_input(self):
         win = self.input_win
@@ -18,32 +28,55 @@ class Client():
         c = "ey"
         x, y = 2, 2
         while True:
-            if y >= self.io_width:
+            if y > self.io_width + 1:
                 y = 2
                 x += 1
             if x >= self.i_height:
                 break
-            c = win.getch(x,y)
+            try:
+                c = win.getch(x,y)
+            except KeyboardInterrupt:
+                return
             if c == curses.KEY_ENTER or c == 10 or c == 13:
-                break
-            c = chr(c)
-            win.addstr(x,y,c)
-            result += c
-            y += 1
+                if result:
+                    break
+                else:
+                    return "\n"
+            if c == 27:
+                raise KeyboardInterrupt
+            if c == curses.KEY_BACKSPACE or c == 127:
+                c = 10
+                if len(result) > 0:
+                    result = result[ : -1]
+                    y -= 1
+                    if y < 2:
+                        x, y =2, self.io_width + 1
+                    win.addstr(x,y,' ')
+                    win.refresh()
+            else:
+                c = chr(c)
+                win.addstr(x,y,c)
+                result += c
+                y += 1
         return result
 
-    def win_print(self, data):
-
+    def win_print(self, data, msgqueue = None):
+        if not data or data == '\n':
+            return
+        if msgqueue is None:
+            msgqueue = self.history
+        data = self.timestamp() + " >> " + data
+        
         while len(data) >= self.io_width:
-            self.history.append(data[ : self.io_width ])
+            msgqueue.append(data[ : self.io_width ])
             data = data[self.io_width : ]
-        self.history.append(data)
+        msgqueue.append(data)
         if len(self.history) > 2 * self.o_height:
-            last_history = self.history[self.o_height : ]
+            last_history = msgqueue[self.o_height : ]
         else:
-            last_history = self.history.copy()
+            last_history = msgqueue.copy()
         last_history.reverse()
-        win = self.output_win 
+        win = self.output_win
         win.clear()
         win.box()
         out_x_limit = 1
@@ -82,7 +115,7 @@ class Client():
         i_win_width = o_win_width
 
         #_general_consts
-        self.io_width = i_win_width - 2
+        self.io_width = i_win_width - 4
         self.i_height = i_win_height - 1
         self.o_height = o_win_height - 1 
 
