@@ -4,6 +4,7 @@
 
 import asyncio
 import logging
+import json
 
 class Server():
     def __init__(self):
@@ -25,19 +26,31 @@ class Server():
         self.logger.addHandler(ch)
         self.logger.addHandler(fh)
 
-        self.client_writer_sockets = set()
+        self.clients = {} #addr: name
 
     def _accept_client(self, reader, writer):
         wr_socket = writer.get_extra_info('socket')
-        self.client_writer_sockets.add(wr_socket)
+        self.clients[wr_socket] = "NoName"
         self.logger.debug("added to {} socket list".format(wr_socket))
 
         task = asyncio.Task(self._handle_client(reader, writer))
         def client_done(task):
             self.logger.info("Client task done: {}".format(task))
-            self.client_writer_sockets.discard(wr_socket)
+            try:
+                self.clients.pop(wr_socket)
+            except KeyError:
+                pass #TODO may be some problems here
 
         task.add_done_callback(client_done)
+
+
+    def _sendall(self, message, excpt=None):
+        for socket in self.clients.keys():
+            if excpt and socket == excpt:
+                continue
+            socket.send(message.encode())
+            name = self.clients[socket]
+            self.logger.debug("Sent {} to {}".format(message, (socket.getpeername(), name)))
 
 
     async def _handle_client(self, reader, writer):
@@ -49,20 +62,33 @@ class Server():
             data = await reader.read(100)
             if not data:
                 break
+
             message = data.decode()
             if message == "~//break":
+                self._sendall("User {} disconnected".format(name), excpt = sock)
                 self.logger.info("User {} disconnected. Closing the client socket".format(addr))
                 writer.close()
                 break
-            self.logger.info("Received {} from {}".format(message, addr))
-
-            for socket in self.client_writer_sockets:
-                if socket != sock:
-                    socket.send(data)
-                    self.logger.debug("Sent {} to {}".format(message, socket.getpeername()))
+            elif "~//name" in message:
+                name = message[8:]
+                self.clients[sock] = name
+                self.logger.debug("------ onl_list: {}".format(self.clients.values()))
+                self._sendall("User {} connected!".format(name), excpt = sock)
+                continue
+            message = message[1:]
+            self.logger.info("Received {} from {}".format(message, (addr, name)))
             
-            writer.write(b"~//END")
-            await writer.drain()
+
+            message = name + ": " + message
+            self._sendall(message, excpt = sock)
+
+            try:
+                client_names = [value for value in self.clients.values()]
+                answer = json.dumps(client_names)
+                writer.write("~//onl {}".format(answer).encode())
+                await writer.drain()
+            except Exception as e:
+                self.logger.debug(e)
         self.logger.debug("---------Client is not active")
 
     def start(self):
