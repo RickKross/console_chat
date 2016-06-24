@@ -59,7 +59,11 @@ class Server():
         sock = writer.get_extra_info('socket')
         self.logger.info("Accepted connection from {}".format(addr))
         while True:
-            data = await reader.read(100)
+            try:
+                data = await reader.read(100)
+            except ConnectionResetError:
+                self.logger.info("User {} disconnected. Closing the client socket".format(addr))
+                break
             if not data:
                 break
 
@@ -67,7 +71,6 @@ class Server():
             if message == "~//break":
                 self._sendall("User {} disconnected".format(name), excpt = sock)
                 self.logger.info("User {} disconnected. Closing the client socket".format(addr))
-                writer.close()
                 break
             elif "~//name" in message:
                 name = message[8:]
@@ -89,11 +92,13 @@ class Server():
                 await writer.drain()
             except Exception as e:
                 self.logger.debug(e)
+        self._sendall("User {} disconnected".format(name), excpt = sock)
+        writer.close()
         self.logger.debug("---------Client is not active")
 
     def start(self):
         loop = asyncio.get_event_loop()
-        coro = asyncio.start_server(self._accept_client, '127.0.0.1', 17117, loop = loop)
+        coro = asyncio.start_server(self._accept_client, port = 17117, loop = loop)
         server = loop.run_until_complete(coro)
 
         # Serve requests until Ctrl+C is pressed

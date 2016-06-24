@@ -179,6 +179,9 @@ class ClientGUI():
         self._set_scr_properties()
 
     def del_gui(self):
+        """
+        Deletes GUI and returns to basic console screen
+        """
         curses.nocbreak()
         self.stdscr.keypad(0)
         curses.echo()
